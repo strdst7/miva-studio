@@ -263,6 +263,16 @@ Current limitations include:
 
 These tradeoffs are documented and tunable through evaluation experiments.
 
+Embedding Dependence
+
+Identity validation relies on embedding similarity, which may vary
+across model providers or embedding versions.
+
+To mitigate this risk, the system exposes the drift threshold as a
+configurable parameter and supports comparative evaluation through
+Ready Tensor experiments. This allows threshold recalibration when
+embedding distributions change.
+
 ⸻
 
 Certification Context
