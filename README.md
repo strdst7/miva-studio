@@ -1,3 +1,14 @@
+MIVA Studio
+Identity-Consistent Agentic AI
+
+Runtime Guardrails • Deterministic Testing • Behavioral Evaluation
+
+## Certification Context
+
+This project was developed as part of the Production-Grade Agentic AI
+Certification to demonstrate how an agentic system can be upgraded with
+testing, runtime safety enforcement, and evaluation.
+
 # MIVA-Studio
 
 Production-Grade Identity-Consistent Agentic AI System
