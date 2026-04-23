@@ -1,1 +1,113 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
 
+[project]
+name = "miva-studio"
+version = "1.0.0"
+description = "Production-grade RAG architecture for identity-critical visual generation"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Nur Amirah Mohd Kamil", email = "mia@mi4inc.ai" }
+]
+keywords = ["RAG", "identity", "visual generation", "guardrails", "agentic AI"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.10"
+
+dependencies = [
+    # Core ML
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "Pillow>=10.0",
+
+    # Vector store clients
+    "qdrant-client>=1.7",
+    "faiss-cpu>=1.7; platform_machine != 'arm64'",
+
+    # Face encoding
+    "insightface>=0.7",
+    "onnxruntime>=1.16",
+
+    # Image quality
+    "scikit-image>=0.21",
+
+    # Observability
+    "structlog>=23.0",
+    "prometheus-client>=0.19",
+
+    # Config
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+
+    # API server
+    "fastapi>=0.104",
+    "uvicorn[standard]>=0.24",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "torch>=2.1",
+    "torchvision>=0.16",
+    "diffusers>=0.24",
+    "transformers>=4.36",
+    "accelerate>=0.24",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "pytest-asyncio>=0.21",
+    "black>=23.0",
+    "isort>=5.12",
+    "ruff>=0.1",
+    "mypy>=1.6",
+    "httpx>=0.25",
+]
+
+[project.scripts]
+miva-serve    = "miva.api.server:main"
+miva-enroll   = "miva.cli.enroll:main"
+miva-evaluate = "miva.evaluation.runner:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["miva*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+markers = [
+    "unit: Fast unit tests with no external dependencies",
+    "integration: Tests requiring model or vector store",
+    "slow: Tests that take > 30 seconds",
+]
