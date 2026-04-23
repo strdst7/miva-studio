@@ -70,7 +70,7 @@ User Request (subject_id + params)
 ### 1. Clone and Set Up
 
 ```bash
-git clone https://github.com/mi4inc/miva-studio.git
+git clone https://github.com/strdst7/miva-studio.git
 cd miva-studio
 chmod +x scripts/setup.sh
 ./scripts/setup.sh
