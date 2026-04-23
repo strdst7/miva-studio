@@ -1,1 +1,10 @@
-
+numpy
+pandas
+pytest
+pydantic
+python-dotenv
+pyyaml
+langgraph
+langchain
+openai
+groq
