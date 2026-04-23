@@ -214,7 +214,7 @@ class EvaluationRunner:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(
-            "Running evaluation: %d subjects, %d test cases, seed=%d",
+            "Running evaluation: %s subjects, %d test cases, seed=%d",
             dataset_spec.get("subjects", {}).get("count", "?"),
             len(test_cases),
             self.seed,
