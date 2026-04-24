@@ -1,55 +1,71 @@
-# configs/default.yaml
-# Default configuration for MIVA Studio.
-# Override with configs/local.yaml or environment variables.
+# MIVA Studio Configuration
+# Production defaults — customize per deployment
 
-vector_store:
-  provider: qdrant
-  host: localhost
-  port: 6333
-  collection: miva_anchors
-  embedding_dim: 512
+system:
+  version: "1.0.0"
+  pipeline_version: "v1.0"
 
 retrieval:
-  top_k: 5
-  candidate_multiplier: 3        # fetch top_k * multiplier before reranking
-  diversity_threshold: 0.95      # MMR: max intra-anchor cosine sim
-  min_anchor_count: 3            # warn if fewer than this many anchors found
+  vector_store_type: "qdrant"        # qdrant, faiss, or pinecone
+  vector_store_path: "./vector_store"
+  embedding_model: "arcface_r50"
+  embedding_dim: 512
+  top_k: 5                           # Retrieve top-5 anchors per query
+  diversity_threshold: 0.95          # Reranking: avoid near-duplicate embeddings
+  recall_threshold: 0.70             # Minimum acceptable recall@k
 
 generation:
-  model_id: runwayml/stable-diffusion-v1-5
-  ip_adapter_model: h94/IP-Adapter
-  device: cpu
-  num_inference_steps: 30
+  model: "stable-diffusion-3"
   guidance_scale: 7.5
-  ip_adapter_scale: 0.8
-  model_cache_dir: ./model_cache
-  output_resolution: [512, 512]
-
-face_encoder:
-  backend: arcface
-  model_path: ./model_cache/arcface_r100.onnx
-  detection_threshold: 0.5
-  embedding_dim: 512
+  num_inference_steps: 50
+  ip_adapter_scale: 1.0
+  seed: null                         # Set to fixed value for reproducibility
 
 guardrails:
-  identity_threshold: 0.75       # Cosine sim — see docs/guardrail_spec.md
-  artifact_threshold: 0.20       # Max artifact score
-  max_regeneration_attempts: 3
-  enable_content_safety: true
+  identity:
+    threshold: 0.75                  # FaceNet threshold
+    source: "FaceNet (Schroff et al., 2015); ArcFace (Deng et al., 2019)"
+  quality:
+    artifact_score_threshold: 0.20
+  safety:
+    nsfw_threshold: 0.5
+  agent:
+    max_regeneration_attempts: 3     # Hard stop at 3 failures (semantic stopping)
 
 observability:
-  trace_backend: jsonl
-  trace_output_dir: ./traces
-  metrics_port: 9090
-  log_level: INFO
+  trace_output_dir: "./logs/traces"
+  metrics_enabled: true
+  prometheus_port: 8000
+  log_level: "INFO"                  # DEBUG, INFO, WARNING, ERROR
+  
+  # Alert thresholds (see docs/observability.md)
+  alerts:
+    identity_score_p50:
+      threshold: 0.78
+      direction: "below"
+      severity: "CRITICAL"
+    guardrail_pass_rate:
+      threshold: 0.70
+      direction: "below"
+      severity: "WARNING"
+    hard_stop_rate:
+      threshold: 0.05
+      direction: "above"
+      severity: "CRITICAL"
+    retrieval_p95_latency_ms:
+      threshold: 300
+      direction: "above"
+      severity: "WARNING"
 
 evaluation:
-  seed: 42
-  output_dir: ./eval_outputs
-  bootstrap_samples: 1000
-  confidence_level: 0.95
-
-api:
-  host: 0.0.0.0
-  port: 8000
-  workers: 1
+  enabled: true
+  dataset_path: "./data/eval_dataset"
+  regression_detection: true
+  
+  # Regression thresholds (see Section 6 of publication)
+  regression_thresholds:
+    identity_score_mean: -0.03       # 3% absolute drop
+    retrieval_recall_at_3: -0.05     # 5% absolute drop
+    guardrail_pass_rate: -0.05
+    hard_stop_rate: 0.02             # 2% absolute increase
+    false_positive_rate: 0.01        # 1% increase → CRITICAL
