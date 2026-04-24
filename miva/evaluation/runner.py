@@ -203,30 +203,45 @@ class EvaluationRunner:
         self.seed = seed
         np.random.seed(seed)
 
-    def run(
+       def run(
         self,
         dataset_spec_path: str | Path,
         output_dir: str | Path,
-    subjects = dataset_spec.get("subjects", {}).get("count", "?")
-n_cases = len(test_cases)
+    ) -> EvaluationReport:
+        dataset_spec = self._load_dataset_spec(dataset_spec_path)
+        test_cases = self._load_test_cases(dataset_spec)
 
-logger.info(
-    "Running evaluation: %s subjects, %d test cases, seed=%d",
-    subjects,
-    n_cases,
-    self.seed
-)
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        subjects = dataset_spec.get("subjects", {}).get("count", "?")
+        n_cases = len(test_cases)
+
+        logger.info(
+            "Running evaluation: %s subjects, %d test cases, seed=%d",
+            subjects,
+            n_cases,
+            self.seed
+        )
 
         results: list[TestCaseResult] = []
-        for tc in test_cases:
-            result = self._run_test_case(tc)
+
+        for test_case in test_cases:
+            result = self._evaluate_case(test_case)
             results.append(result)
 
-        report = self._compute_report(results, dataset_spec)
-        self._save_report(report, output_dir)
-        self._print_summary(report)
-        return report
+        report = self._build_report(
+            dataset_spec=dataset_spec,
+            results=results
+        )
 
+        report_path = self._save_report(report, output_dir)
+
+        logger.info("Evaluation report saved: %s", report_path)
+
+        self._print_summary(report)
+
+        return report
     def _load_dataset_spec(self, path: str | Path) -> dict:
         with open(path) as f:
             return yaml.safe_load(f)
