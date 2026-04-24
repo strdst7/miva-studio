@@ -1,0 +1,255 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: miva-studio
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: miva-config
+  namespace: miva-studio
+data:
+  miva_default.yaml: |
+    system:
+      version: "1.0.0"
+      pipeline_version: "v1.0"
+    
+    retrieval:
+      vector_store_type: "qdrant"
+      vector_store_path: "/data/vector_store"
+      embedding_model: "arcface_r50"
+      embedding_dim: 512
+      top_k: 5
+      diversity_threshold: 0.95
+      recall_threshold: 0.70
+    
+    generation:
+      model: "stable-diffusion-3"
+      guidance_scale: 7.5
+      num_inference_steps: 50
+      ip_adapter_scale: 1.0
+    
+    guardrails:
+      identity:
+        threshold: 0.75
+      quality:
+        artifact_score_threshold: 0.20
+      safety:
+        nsfw_threshold: 0.5
+      agent:
+        max_regeneration_attempts: 3
+    
+    observability:
+      trace_output_dir: "/logs/traces"
+      metrics_enabled: true
+      prometheus_port: 8000
+      log_level: "INFO"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: miva-vector-store-pvc
+  namespace: miva-studio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: miva-logs-pvc
+  namespace: miva-studio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: miva-pipeline
+  namespace: miva-studio
+  labels:
+    app: miva-studio
+    component: pipeline
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: miva-studio
+      component: pipeline
+  template:
+    metadata:
+      labels:
+        app: miva-studio
+        component: pipeline
+    spec:
+      containers:
+      - name: pipeline
+        image: miva-studio:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: metrics
+          containerPort: 8000
+          protocol: TCP
+        
+        env:
+        - name: MIVA_CONFIG
+          value: "/config/miva_default.yaml"
+        - name: MIVA_LOG_LEVEL
+          value: "INFO"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        
+        resources:
+          requests:
+            memory: "8Gi"
+            cpu: "4"
+            nvidia.com/gpu: "1"
+          limits:
+            memory: "16Gi"
+            cpu: "8"
+            nvidia.com/gpu: "1"
+        
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+        - name: vector-store
+          mountPath: /data/vector_store
+        - name: logs
+          mountPath: /logs
+        
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "from miva.pipeline import MIVAPipeline; p = MIVAPipeline(); exit(0 if p.health_check() else 1)"
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "from miva.pipeline import MIVAPipeline; p = MIVAPipeline(); exit(0 if p.health_check() else 1)"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+        
+        securityContext:
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+      
+      volumes:
+      - name: config
+        configMap:
+          name: miva-config
+      - name: vector-store
+        persistentVolumeClaim:
+          claimName: miva-vector-store-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: miva-logs-pvc
+      
+      nodeSelector:
+        accelerator: nvidia-tesla-a100
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: miva-pipeline
+  namespace: miva-studio
+  labels:
+    app: miva-studio
+    component: pipeline
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 8000
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: miva-studio
+    component: pipeline
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: miva-pipeline-hpa
+  namespace: miva-studio
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: miva-pipeline
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 2
+        periodSeconds: 15
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: miva-pipeline
+  namespace: miva-studio
+spec:
+  selector:
+    matchLabels:
+      app: miva-studio
+      component: pipeline
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
