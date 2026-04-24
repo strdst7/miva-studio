@@ -1,10 +1,11 @@
 """
-MIVA Studio
-===========
-Production-grade RAG architecture for identity-critical visual generation.
-
-Author: Nur Amirah Mohd Kamil — MI4 Inc.
+MIVA Studio package.
 """
+
 __version__ = "0.1.0"
 __author__ = "Nur Amirah Mohd Kamil"
-__email__ = "hello@nuramirahmohdkamil.com"
+
+__all__ = [
+    "__version__",
+    "__author__",
+]

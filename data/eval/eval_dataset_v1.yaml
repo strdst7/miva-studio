@@ -1,0 +1,21 @@
+name: miva_eval_v1
+description: Identity consistency benchmark
+
+subjects:
+  - user_a
+
+cases:
+  - id: case_001
+    prompt: professional portrait clean lighting
+    subject: user_a
+    expected_behavior: low_drift
+
+  - id: case_002
+    prompt: cinematic side profile dramatic lighting
+    subject: user_a
+    expected_behavior: low_drift
+
+  - id: case_003
+    prompt: passport neutral white background
+    subject: user_a
+    expected_behavior: strict_match
