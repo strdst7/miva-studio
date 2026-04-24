@@ -1,3 +1,4 @@
+
 .env
 .venv/
 __pycache__/
@@ -6,3 +7,4 @@ __pycache__/
 eval_outputs/
 logs/
 traces/
+.ipynb_checkpoints/
