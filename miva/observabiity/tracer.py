@@ -1,184 +1,217 @@
 """
-miva/observability/tracer.py
-Structured session tracing and metric emission.
+Observability layer for MIVA Studio.
 
-Every session produces a complete trace — success and failure alike.
-Post-mortems on production failures require the trace of the failed session,
-not just the happy-path logs.
+Emits structured session traces for each generation request.
+Traces capture all decisions, scores, and outcomes for auditability and debugging.
+
+Key principle: The trace for a failed session is as detailed as for a successful one.
 """
-from __future__ import annotations
 
 import json
 import logging
-import os
-import time
-import uuid
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass, asdict
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Dict, Any
+import uuid
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class MIVASessionTrace:
-    """Complete record of one user session — every decision, every score."""
-    # Session identity
+class AttemptRecord:
+    """Record of a single generation attempt."""
+    attempt_number: int
+    identity_score: Optional[float]
+    artifact_score: Optional[float]
+    guardrail_decision: str  # PASS, REJECT_AND_RETRY, HARD_STOP
+
+
+@dataclass
+class SessionTrace:
+    """Complete structured trace for a generation session."""
+    
     session_id: str
     subject_id: str
-    pipeline_version: str
-    timestamp_utc: str
-
+    timestamp_start: str
+    timestamp_end: Optional[str] = None
+    
     # Retrieval
-    retrieval_latency_ms: float
-    anchors_retrieved: int
-    anchor_quality_scores: list[float]
-    estimated_recall: float
-
+    retrieval_latency_ms: float = 0
+    anchors_retrieved: int = 0
+    
     # Generation attempts
-    attempts: list[dict]
-
-    # Terminal outcome
-    final_action: str
-    output_delivered: bool
-    total_attempts: int
-    final_identity_score: float
-    failure_reason: Optional[str]
-    total_latency_ms: float
+    attempts: List[AttemptRecord] = None
+    
+    # Outcome
+    final_action: str = "PENDING"  # PASS, HARD_STOP, COLD_START_REJECTION
+    output_delivered: bool = False
+    final_identity_score: Optional[float] = None
+    failure_reason: Optional[str] = None
+    total_latency_ms: float = 0
+    
+    def __post_init__(self):
+        if self.attempts is None:
+            self.attempts = []
+    
+    def record_attempt(
+        self,
+        attempt_number: int,
+        identity_score: Optional[float],
+        artifact_score: Optional[float],
+        decision: str
+    ):
+        """Record a generation attempt."""
+        self.attempts.append(AttemptRecord(
+            attempt_number=attempt_number,
+            identity_score=identity_score,
+            artifact_score=artifact_score,
+            guardrail_decision=decision
+        ))
+    
+    def finalize(
+        self,
+        final_action: str,
+        output_delivered: bool = False,
+        final_identity_score: Optional[float] = None,
+        failure_reason: Optional[str] = None,
+        total_latency_ms: float = 0
+    ):
+        """Finalize the trace with outcome information."""
+        self.final_action = final_action
+        self.output_delivered = output_delivered
+        self.final_identity_score = final_identity_score
+        self.failure_reason = failure_reason
+        self.total_latency_ms = total_latency_ms
+        self.timestamp_end = datetime.utcnow().isoformat() + "Z"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        d = asdict(self)
+        d['attempts'] = [asdict(a) for a in self.attempts]
+        return d
+    
+    def to_json(self) -> str:
+        """Serialize to JSON string."""
+        return json.dumps(self.to_dict(), indent=2)
 
 
 class SessionTracer:
     """
-    Records structured session traces to the configured backend.
+    Manages session trace generation and persistence.
     
-    Trace backends:
-      jsonl   — One JSON object per line in a rolling file (default, zero dependencies)
-      prometheus — Emit metrics to a Prometheus pushgateway
-      otlp    — OpenTelemetry trace export (requires opentelemetry packages)
+    Emits structured traces to disk for each session.
+    Traces enable full auditability and post-mortems on failures.
     """
-
-    def __init__(
-        self,
-        backend: str = "jsonl",
-        output_dir: str = "./traces",
-        pipeline_version: str = "unknown",
-        metrics_port: int = 9090,
-    ):
-        self.backend = backend
-        self.output_dir = Path(output_dir)
-        self.pipeline_version = pipeline_version
-        self.metrics_port = metrics_port
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        self._session_count = 0
-        self._success_count = 0
-        self._hard_stop_count = 0
-        self._identity_scores: list[float] = []
-
-        if backend == "prometheus":
-            self._init_prometheus()
-
-    def _init_prometheus(self):
-        try:
-            from prometheus_client import Counter, Gauge, Histogram, start_http_server
-            self._prom_sessions = Counter("miva_sessions_total", "Total sessions", ["outcome"])
-            self._prom_identity_score = Histogram(
-                "miva_identity_score",
-                "Identity cosine similarity of delivered outputs",
-                buckets=[0.65, 0.70, 0.75, 0.78, 0.80, 0.83, 0.85, 0.88, 0.90, 0.95, 1.0],
-            )
-            self._prom_hard_stop_rate = Gauge("miva_hard_stop_rate_1h", "Hard stop rate (1h window)")
-            self._prom_attempts = Histogram(
-                "miva_generation_attempts",
-                "Attempts per session",
-                buckets=[1, 2, 3],
-            )
-            start_http_server(self.metrics_port)
-            logger.info("Prometheus metrics available on port %d", self.metrics_port)
-        except ImportError:
-            logger.warning("prometheus-client not installed — Prometheus metrics disabled")
-            self.backend = "jsonl"
-
-    def record_session(self, agent_result, retrieval_result) -> MIVASessionTrace:
-        """Build and persist a session trace from agent and retrieval results."""
-        trace = MIVASessionTrace(
-            session_id=str(uuid.uuid4()),
-            subject_id=agent_result.subject_id,
-            pipeline_version=self.pipeline_version,
-            timestamp_utc=datetime.now(timezone.utc).isoformat(),
-            retrieval_latency_ms=retrieval_result.latency_ms if hasattr(retrieval_result, 'latency_ms') else 0.0,
-            anchors_retrieved=len(retrieval_result.anchors) if hasattr(retrieval_result, 'anchors') else 0,
-            anchor_quality_scores=[
-                a.quality_score for a in retrieval_result.anchors
-            ] if hasattr(retrieval_result, 'anchors') else [],
-            estimated_recall=retrieval_result.estimated_recall if hasattr(retrieval_result, 'estimated_recall') else 0.0,
-            attempts=[
-                {
-                    "attempt_number": r.attempt_number,
-                    "generation_latency_ms": r.generation_latency_ms,
-                    "identity_score": r.identity_score,
-                    "artifact_score": r.artifact_score,
-                    "guardrail_decision": r.guardrail_decision,
-                    "validators_passed": r.validators_passed,
-                    "validators_failed": r.validators_failed,
-                }
-                for r in agent_result.attempt_records
-            ],
-            final_action=agent_result.outcome.value,
-            output_delivered=agent_result.delivered,
-            total_attempts=agent_result.total_attempts,
-            final_identity_score=agent_result.final_identity_score,
-            failure_reason=agent_result.failure_reason,
-            total_latency_ms=agent_result.total_latency_ms,
+    
+    def __init__(self, config):
+        self.config = config
+        self.trace_dir = Path(config.observability.trace_output_dir)
+        self.trace_dir.mkdir(parents=True, exist_ok=True)
+        self.logger = logging.getLogger(__name__)
+    
+    def new_session_id(self) -> str:
+        """Generate a new unique session ID."""
+        return str(uuid.uuid4())
+    
+    def create_trace(self, session_id: str, subject_id: str) -> SessionTrace:
+        """Create a new session trace."""
+        return SessionTrace(
+            session_id=session_id,
+            subject_id=subject_id,
+            timestamp_start=datetime.utcnow().isoformat() + "Z"
         )
-
-        self._persist(trace)
-        self._update_metrics(trace)
-        return trace
-
-    def _persist(self, trace: MIVASessionTrace) -> None:
-        """Write trace to configured backend."""
-        if self.backend == "jsonl":
-            self._write_jsonl(trace)
-        elif self.backend == "prometheus":
-            self._emit_prometheus(trace)
-        # otlp: implement with opentelemetry-sdk
-
-    def _write_jsonl(self, trace: MIVASessionTrace) -> None:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        trace_file = self.output_dir / f"traces_{date_str}.jsonl"
-        with open(trace_file, "a") as f:
-            f.write(json.dumps(asdict(trace)) + "\n")
-
-    def _emit_prometheus(self, trace: MIVASessionTrace) -> None:
-        try:
-            self._prom_sessions.labels(outcome=trace.final_action).inc()
-            if trace.output_delivered:
-                self._prom_identity_score.observe(trace.final_identity_score)
-            if trace.total_attempts > 0:
-                self._prom_attempts.observe(trace.total_attempts)
-        except Exception as exc:
-            logger.warning("Prometheus emit failed: %s", exc)
-
-    def _update_metrics(self, trace: MIVASessionTrace) -> None:
-        """Update in-memory aggregates for real-time monitoring."""
-        self._session_count += 1
-        if trace.output_delivered:
-            self._success_count += 1
-            self._identity_scores.append(trace.final_identity_score)
-        if trace.final_action == "HARD_STOP":
-            self._hard_stop_count += 1
-
-    def get_summary(self) -> dict:
-        """Current session-level metrics snapshot."""
-        import numpy as np
-        scores = self._identity_scores or [0.0]
+    
+    def save_trace(self, trace: SessionTrace):
+        """Save trace to disk."""
+        trace_path = self.trace_dir / f"{trace.session_id}.json"
+        
+        with open(trace_path, 'w') as f:
+            f.write(trace.to_json())
+        
+        self.logger.debug(f"Trace saved: {trace_path}")
+    
+    def load_trace(self, session_id: str) -> Optional[SessionTrace]:
+        """Load a trace from disk."""
+        trace_path = self.trace_dir / f"{session_id}.json"
+        
+        if not trace_path.exists():
+            return None
+        
+        with open(trace_path, 'r') as f:
+            data = json.load(f)
+        
+        return self._dict_to_trace(data)
+    
+    @staticmethod
+    def _dict_to_trace(data: Dict[str, Any]) -> SessionTrace:
+        """Convert dictionary back to SessionTrace object."""
+        attempts = [
+            AttemptRecord(**a) for a in data.get('attempts', [])
+        ]
+        
+        return SessionTrace(
+            session_id=data['session_id'],
+            subject_id=data['subject_id'],
+            timestamp_start=data['timestamp_start'],
+            timestamp_end=data.get('timestamp_end'),
+            retrieval_latency_ms=data.get('retrieval_latency_ms', 0),
+            anchors_retrieved=data.get('anchors_retrieved', 0),
+            attempts=attempts,
+            final_action=data.get('final_action', 'PENDING'),
+            output_delivered=data.get('output_delivered', False),
+            final_identity_score=data.get('final_identity_score'),
+            failure_reason=data.get('failure_reason'),
+            total_latency_ms=data.get('total_latency_ms', 0)
+        )
+    
+    def list_traces(self, limit: Optional[int] = None) -> List[SessionTrace]:
+        """List all traces on disk."""
+        traces = []
+        for trace_file in sorted(self.trace_dir.glob("*.json"), reverse=True):
+            with open(trace_file, 'r') as f:
+                data = json.load(f)
+            traces.append(self._dict_to_trace(data))
+            
+            if limit and len(traces) >= limit:
+                break
+        
+        return traces
+    
+    def get_trace_summary(self, trace: SessionTrace) -> Dict[str, Any]:
+        """Generate human-readable summary of a trace."""
         return {
-            "total_sessions": self._session_count,
-            "delivered": self._success_count,
-            "hard_stops": self._hard_stop_count,
-            "hard_stop_rate": self._hard_stop_count / max(self._session_count, 1),
-            "identity_score_p50": float(np.percentile(scores, 50)),
-            "identity_score_p10": float(np.percentile(scores, 10)),
+            'session_id': trace.session_id,
+            'subject_id': trace.subject_id,
+            'timestamp': trace.timestamp_start,
+            'attempts': len(trace.attempts),
+            'final_action': trace.final_action,
+            'success': trace.output_delivered,
+            'identity_score': f"{trace.final_identity_score:.4f}" if trace.final_identity_score else "N/A",
+            'latency_ms': f"{trace.total_latency_ms:.0f}",
+            'failure_reason': trace.failure_reason or "N/A"
         }
+
+
+class MetricsEmitter:
+    """
+    Emit real-time operational metrics.
+    
+    In production, sends to Prometheus, CloudWatch, or similar.
+    """
+    
+    def __init__(self, config):
+        self.config = config
+        self.logger = logging.getLogger(__name__)
+    
+    def emit_generation_result(self, result):
+        """Emit metrics for a generation result."""
+        metrics = {
+            'identity_score': result.final_identity_score or 0,
+            'attempts': result.attempts,
+            'success': result.success,
+            'latency_ms': 0,  # Would come from trace
+        }
+        
+        # In production, would send to Prometheus/CloudWatch
+        self.logger.debug(f"Metrics: {metrics}")
