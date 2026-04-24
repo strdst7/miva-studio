@@ -11,6 +11,7 @@
 > *A plausible output is not the same as a correct one.*
 
 ---
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/6bf91125-3995-4d03-b47b-b26ed9d232b5" />
 
 ## What Is MIVA Studio?
 
