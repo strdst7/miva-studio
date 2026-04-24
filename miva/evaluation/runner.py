@@ -207,17 +207,14 @@ class EvaluationRunner:
         self,
         dataset_spec_path: str | Path,
         output_dir: str | Path,
-    ) -> EvaluationReport:
-        dataset_spec = self._load_dataset_spec(dataset_spec_path)
-        test_cases = self._load_test_cases(dataset_spec)
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+    subjects = dataset_spec.get("subjects", {}).get("count", "?")
+n_cases = len(test_cases)
 
-        logger.info(
+logger.info(
     "Running evaluation: %s subjects, %d test cases, seed=%d",
     subjects,
     n_cases,
-    seed
+    self.seed
 )
 
         results: list[TestCaseResult] = []
