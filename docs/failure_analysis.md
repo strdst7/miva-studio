@@ -250,3 +250,94 @@ Raises:
 - Graceful rejection is better than exception
 
 ---
+
+## Failure 5: Guardrail Voting Disagreement (FPR Issue)
+
+### Severity: MEDIUM
+
+Different guardrail validators disagree on accept/reject decision, leading to occasional false positives (invalid output delivered).
+
+### Root Cause
+
+Identity validator passes (cosine_sim = 0.76 > 0.75), but quality validator marks image as slightly degraded (artifact_score = 0.21 > 0.20). Decision logic was:
+
+```python
+# WRONG: AND logic means all must pass, OR logic means any can pass
+if identity.passed AND quality.passed AND safety.passed:
+    return PASS
+```
+
+This is correct. But in edge cases with partial occlusion, identity similarity stays high (face is recognizable) but quality degrades. Some users acceptable with low-quality but high-confidence identity.
+
+### Detection
+
+False positive rate measured at 0.039 (3.9%), exceeding weak-pass threshold of 0.03. Manual inspection of FP cases showed pattern: cross-identity with partial occlusion (face resembles target with one distinctive feature obscured).
+
+### Impact
+
+- ~8 of 200 test cases were incorrectly delivered as valid
+- Low impact per case, but accumulates at scale
+- Identified during evaluation (not production)
+
+### Remediation
+
+**Planned for v1.1:** Multi-anchor voting:
+```python
+# Instead of max(similarities) >= threshold
+# Use: sum(s >= threshold for s in scores[:3]) >= 2
+
+# Requires 2 of top-3 anchors above threshold, not just max
+scores = [cosine_similarity(generated_embedding, a) for a in anchors]
+top_3_scores = sorted(scores, reverse=True)[:3]
+votes_passed = sum(1 for s in top_3_scores if s >= self.THRESHOLD)
+
+if votes_passed >= 2:
+    return PASS
+```
+
+**Testing:**
+```python
+def test_guardrail_requires_multi_anchor_vote():
+    """Guardrail requires 2 of 3 top anchors above threshold."""
+    # Create embedding with high similarity to 1 anchor, low to others
+    # Should FAIL (only 1 vote)
+    assert decision.action != PASS
+```
+
+**Expected Impact:** FPR drops to ~0.01-0.02, achieving strong-pass threshold.
+
+**Lessons:**
+- Single-anchor checks can miss imposters (lucky high similarity)
+- Voting logic (multiple anchors) is more robust
+- 2-of-3 voting is good balance (tolerates 1 bad anchor, requires 2 good)
+- Trade-off: may increase FNR slightly (acceptable, retry handles it)
+
+---
+
+## Failure Mode Summary
+
+| Failure | Severity | Cause | Detection | Remediation | Status |
+|---|---|---|---|---|---|
+| Identity Drift | CRITICAL | Logic bug (mean vs max) | Unit test + manual inspection | Fixed (v0.8) | ✓ RESOLVED |
+| Unbounded Loop | CRITICAL | Missing invariant check | Load testing | Invariant assertion | ✓ RESOLVED |
+| Silent Degradation | HIGH | Model version mismatch | 7-day trending metric | Version pinning + metadata | ✓ RESOLVED |
+| Cold Start | MEDIUM | Missing edge case handling | Integration test | Graceful rejection | ✓ RESOLVED |
+| FPR on Occlusion | MEDIUM | Single-anchor check insufficient | Evaluation metrics | Multi-anchor voting (v1.1) | ⏳ PLANNED |
+
+---
+
+## Lessons for Production Systems
+
+1. **Critical invariants must be enforced in code**, not just documented
+2. **Empty/missing data are normal edge cases**, not error states
+3. **Trending metrics catch silent degradation** better than point-in-time metrics
+4. **Unbounded loops are worse than failures** (consume resources indefinitely)
+5. **Manual inspection reveals logic errors** that metrics miss
+6. **Voting logic is more robust** than single-point checks
+7. **All code paths should be testable**, including failures
+8. **Graceful rejection > exceptions** in user-facing systems
+
+---
+
+**Last updated:** April 2025  
+**Status:** Production v1.0 (4 resolved, 1 planned for v1.1)
