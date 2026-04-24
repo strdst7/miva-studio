@@ -214,7 +214,11 @@ class EvaluationRunner:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
+<<<<<<< HEAD
         subjects = dataset_spec.get("subjects", {}).get("count", "?")
+=======
+            subjects = dataset_spec.get("subjects", {}).get("count", "?")
+>>>>>>> d2278f6 (Fix evaluator schema handling and runner logging)
         n_cases = len(test_cases)
 
         logger.info(

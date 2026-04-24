@@ -1,8 +1,10 @@
 name: miva_eval_v1
-description: Identity consistency benchmark
+description: Identity consistency benchmark dataset for MIVA Studio
 
 subjects:
-  - user_a
+  count: 1
+  ids:
+    - user_a
 
 cases:
   - id: case_001
@@ -19,3 +21,13 @@ cases:
     prompt: passport neutral white background
     subject: user_a
     expected_behavior: strict_match
+
+  - id: case_004
+    prompt: fashion editorial studio shot
+    subject: user_a
+    expected_behavior: controlled_drift
+
+  - id: case_005
+    prompt: anime reinterpretation portrait
+    subject: user_a
+    expected_behavior: threshold_sensitiveh
