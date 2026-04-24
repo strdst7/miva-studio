@@ -1,10 +1,68 @@
-numpy
-pandas
-pytest
-pydantic
-python-dotenv
-pyyaml
-langgraph
-langchain
-openai
-groq
+# MIVA Studio Requirements
+# Python 3.10+
+
+# Core dependencies
+torch>=2.0.0,<3.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
+diffusers>=0.21.0
+accelerate>=0.20.0
+
+# Vision and image processing
+opencv-python>=4.8.0
+pillow>=10.0.0
+scikit-image>=0.21.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Vector store and retrieval
+qdrant-client>=2.4.0
+faiss-cpu>=1.7.0  # Or faiss-gpu for GPU acceleration
+pinecone-client>=3.0.0  # Optional, for cloud vector store
+
+# Face recognition and embedding
+insightface>=0.7.0
+retinaface>=0.0.17
+
+# Configuration and CLI
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+pyyaml>=6.0
+click>=8.1.0
+typer>=0.9.0
+
+# Data and evaluation
+pandas>=2.0.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Observability and logging
+python-json-logger>=2.0.0
+prometheus-client>=0.17.0
+structlog>=23.1.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+pytest-timeout>=2.1.0
+
+# Code quality
+black>=23.7.0
+flake8>=6.0.0
+isort>=5.12.0
+mypy>=1.4.0
+
+# Development
+ipython>=8.14.0
+jupyter>=1.0.0
+ipykernel>=6.24.0
+
+# Optional: cloud and deployment
+boto3>=1.28.0  # For AWS S3
+google-cloud-storage>=2.10.0  # For GCS
+docker>=6.1.0  # For containerization
+
+# Optional: advanced metrics
+wandb>=0.15.0  # Weights & Biases logging
