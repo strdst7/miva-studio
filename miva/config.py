@@ -14,6 +14,15 @@ from pydantic import BaseModel, Field, validator
 
 
 @dataclass
+class VectorStoreConfig:
+    """Vector store backend configuration."""
+    provider: str = "qdrant"
+    host: str = "localhost"
+    port: int = 6333
+    collection_name: str = "miva_identities"
+
+
+@dataclass
 class RetrievalConfig:
     """Retrieval stage configuration."""
     vector_store_type: str = "qdrant"  # qdrant, faiss, pinecone
@@ -106,6 +115,7 @@ class MIVAConfig:
     system_version: str = "1.0.0"
     pipeline_version: str = "v1.0"
     
+    vector_store: VectorStoreConfig = field(default_factory=VectorStoreConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     generation: GenerationConfig = field(default_factory=GenerationConfig)
     guardrails: GuardrailConfig = field(default_factory=GuardrailConfig)
@@ -121,12 +131,24 @@ class MIVAConfig:
         # Build nested configs
         config = cls()
         
+        if 'vector_store' in config_dict:
+            config.vector_store = VectorStoreConfig(**config_dict['vector_store'])
         if 'retrieval' in config_dict:
             config.retrieval = RetrievalConfig(**config_dict['retrieval'])
         if 'generation' in config_dict:
             config.generation = GenerationConfig(**config_dict['generation'])
         if 'guardrails' in config_dict:
-            config.guardrails = GuardrailConfig(**config_dict['guardrails'])
+            gc_dict = config_dict['guardrails']
+            identity = GuardrailConfig.IdentityConfig(**gc_dict.get('identity', {}))
+            quality = GuardrailConfig.QualityConfig(**gc_dict.get('quality', {}))
+            safety = GuardrailConfig.SafetyConfig(**gc_dict.get('safety', {}))
+            agent = GuardrailConfig.AgentConfig(**gc_dict.get('agent', {}))
+            config.guardrails = GuardrailConfig(
+                identity=identity,
+                quality=quality,
+                safety=safety,
+                agent=agent
+            )
         if 'observability' in config_dict:
             config.observability = ObservabilityConfig(**config_dict['observability'])
         if 'evaluation' in config_dict:
@@ -137,7 +159,7 @@ class MIVAConfig:
     @classmethod
     def from_env(cls) -> "MIVAConfig":
         """Load configuration from environment variables (overrides YAML)."""
-        config_path = os.getenv("MIVA_CONFIG", "config/miva_default.yaml")
+        config_path = os.getenv("MIVA_CONFIG", "miva/configs/default.yaml")
         config = cls.from_yaml(config_path)
         
         # Environment variable overrides

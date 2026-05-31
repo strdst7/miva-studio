@@ -1,0 +1,51 @@
+{
+  "pipeline_version": "1.0.0",
+  "dataset_version": "unknown",
+  "evaluation_timestamp": "2026-05-31T01:36:06.140083+00:00",
+  "seed": 42,
+  "n_subjects": 1,
+  "n_test_cases": 2,
+  "retrieval_recall_at_3": {
+    "mean": 0.88,
+    "ci_lower": 0.88,
+    "ci_upper": 0.88,
+    "n": 2
+  },
+  "retrieval_recall_at_5": {
+    "mean": 0.93,
+    "ci_lower": 0.93,
+    "ci_upper": 0.93,
+    "n": 2
+  },
+  "identity_score_mean": {
+    "mean": 0.83,
+    "ci_lower": 0.83,
+    "ci_upper": 0.83,
+    "n": 1
+  },
+  "guardrail_pass_rate_first_attempt": 0.5,
+  "hard_stop_rate": 0.5,
+  "false_positive_rate": {
+    "mean": 0.0,
+    "ci_lower": 0.0,
+    "ci_upper": 0.0,
+    "n": 1
+  },
+  "false_negative_rate": {
+    "mean": 0.0,
+    "ci_lower": 0.0,
+    "ci_upper": 0.0,
+    "n": 1
+  },
+  "ablation_delta": null,
+  "ablation_p_value": null,
+  "ablation_cohens_d": null,
+  "grades": {
+    "retrieval_recall_at_3": "pass",
+    "retrieval_recall_at_5": "pass",
+    "identity_score_mean": "pass",
+    "guardrail_pass_rate_first_attempt": "fail",
+    "hard_stop_rate": "fail",
+    "false_positive_rate": "strong_pass"
+  }
+}

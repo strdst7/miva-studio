@@ -203,7 +203,7 @@ class EvaluationRunner:
         self.seed = seed
         np.random.seed(seed)
 
-       def run(
+    def run(
         self,
         dataset_spec_path: str | Path,
         output_dir: str | Path,
@@ -214,11 +214,7 @@ class EvaluationRunner:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-<<<<<<< HEAD
         subjects = dataset_spec.get("subjects", {}).get("count", "?")
-=======
-            subjects = dataset_spec.get("subjects", {}).get("count", "?")
->>>>>>> d2278f6 (Fix evaluator schema handling and runner logging)
         n_cases = len(test_cases)
 
         logger.info(
@@ -228,24 +224,18 @@ class EvaluationRunner:
             self.seed
         )
 
-        results: list[TestCaseResult] = []
-
+        results = []
         for test_case in test_cases:
-            result = self._evaluate_case(test_case)
+            result = self._run_test_case(test_case)
             results.append(result)
 
-        report = self._build_report(
-            dataset_spec=dataset_spec,
-            results=results
-        )
+        report = self._compute_report(results, dataset_spec)
 
-        report_path = self._save_report(report, output_dir)
-
-        logger.info("Evaluation report saved: %s", report_path)
-
+        self._save_report(report, output_dir)
         self._print_summary(report)
 
         return report
+
     def _load_dataset_spec(self, path: str | Path) -> dict:
         with open(path) as f:
             return yaml.safe_load(f)

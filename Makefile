@@ -27,16 +27,16 @@ install-gpu:
 # ── Testing ───────────────────────────────────────────────────────────────────
 
 test:
-	$(PYTEST) tests/ -v -m "not integration"
+	PYTHONPATH=. $(PYTEST) tests/ -v -m "not integration"
 
 test-unit:
-	$(PYTEST) tests/unit/ -v
+	PYTHONPATH=. $(PYTEST) tests/unit/ -v
 
 test-integration:
-	$(PYTEST) tests/integration/ -v -m integration
+	PYTHONPATH=. $(PYTEST) tests/integration/ -v -m integration
 
 test-all:
-	$(PYTEST) tests/ -v
+	PYTHONPATH=. $(PYTEST) tests/ -v
 
 coverage:
 	$(PYTEST) tests/unit/ --cov=miva --cov-report=term-missing --cov-report=html

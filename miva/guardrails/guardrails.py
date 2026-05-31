@@ -316,7 +316,7 @@ class GuardrailEvaluator:
                 validators_failed.append(name)
         
         # Decision logic
-        if all(results.values()):
+        if all(r.passed for r in results.values()):
             # ALL PASS
             return GuardrailDecision(
                 action=GuardrailAction.PASS,
