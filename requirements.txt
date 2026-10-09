@@ -16,7 +16,7 @@ numpy>=1.24.0
 scipy>=1.10.0
 
 # Vector store and retrieval
-qdrant-client>=2.4.0
+qdrant-client>=1.7.0
 faiss-cpu>=1.7.0  # Or faiss-gpu for GPU acceleration
 pinecone-client>=3.0.0  # Optional, for cloud vector store
 

@@ -44,7 +44,7 @@ class GenerationResponse(BaseModel):
 async def health_check():
     if pipeline and pipeline.health_check():
         return {"status": "healthy"}
-    return {"status": "unhealthy"}
+    raise HTTPException(status_code=503, detail="Pipeline is unhealthy")
 
 @app.post("/generate", response_model=List[GenerationResponse])
 async def generate(request: GenerationRequest):

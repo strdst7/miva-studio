@@ -38,20 +38,20 @@ RUN pip install --upgrade pip setuptools wheel && \
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p {vector_store,outputs,logs,models,data} && \
-    mkdir -p logs/{traces,enrollments} && \
-    mkdir -p outputs/{generated,ablation_samples} && \
-    mkdir -p data/eval_dataset
+RUN mkdir -p vector_store outputs logs models data \
+    logs/traces logs/enrollments \
+    outputs/generated outputs/ablation_samples \
+    data/eval_dataset
 
 # Install MIVA package
 RUN pip install -e .
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "from miva.pipeline import MIVAPipeline; p = MIVAPipeline(); exit(0 if p.health_check() else 1)"
+    CMD curl --fail --silent http://127.0.0.1:${PORT:-8080}/health || exit 1
 
 # Expose Prometheus metrics port
-EXPOSE 8000
+EXPOSE 8080
 
 # Default command
-CMD ["miva", "health-check"]
+CMD ["sh", "-c", "exec uvicorn miva.api.server:app --host 0.0.0.0 --port ${PORT:-8080}"]
