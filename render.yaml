@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: miva-studio-preview
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: MIVA_PREVIEW_MODE
+        value: "true"

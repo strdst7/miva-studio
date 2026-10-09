@@ -8,15 +8,26 @@ from pydantic import BaseModel
 from typing import Optional, List
 import uuid
 import logging
+import os
 
 from miva.pipeline import MIVAPipeline
 from miva.config import get_config
 
 app = FastAPI(title="MIVA Studio API", version="1.0.0")
 logger = logging.getLogger(__name__)
+preview_mode = os.getenv("MIVA_PREVIEW_MODE", "").lower() in {"1", "true", "yes"}
 
 # Global pipeline instance
 pipeline = None
+
+@app.get("/")
+async def index():
+    return {
+        "service": "MIVA Studio API",
+        "mode": "preview" if preview_mode else "full",
+        "docs": "/docs",
+        "generation": "disabled" if preview_mode else "enabled",
+    }
 
 @app.on_event("startup")
 async def startup_event():
@@ -48,6 +59,11 @@ async def health_check():
 
 @app.post("/generate", response_model=List[GenerationResponse])
 async def generate(request: GenerationRequest):
+    if preview_mode:
+        raise HTTPException(
+            status_code=503,
+            detail="Image generation is disabled on the free preview instance.",
+        )
     if not pipeline:
         raise HTTPException(status_code=503, detail="Pipeline not initialized")
     
